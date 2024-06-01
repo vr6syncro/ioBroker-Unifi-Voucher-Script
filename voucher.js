@@ -1,7 +1,8 @@
 // V0.1 initialer release
+// V0.2 Fixed Login/Logout, THX to liv-in-sky. Changed Log output
 
 const Unifi = require('node-unifi');
-
+ 
 // Konfiguration
 const config = {
     hostname: "192.168.2.1",
@@ -10,9 +11,7 @@ const config = {
     password: 'Password!',
     sslverify: false
 };
-
-const unifi = new Unifi.Controller({ hostname: config.hostname, port: config.port, sslverify: config.sslverify });
-
+ 
 // Erstelle die benötigten Datenpunkte für die Voucher-Konfiguration
 createState("0_userdata.0.Unifi.Voucher.config.minutes", 123, { type: 'number', name: 'minutes', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.config.count", 1, { type: 'number', name: 'count', read: true, write: true });
@@ -21,7 +20,7 @@ createState("0_userdata.0.Unifi.Voucher.config.note", "testthis", { type: 'strin
 createState("0_userdata.0.Unifi.Voucher.config.up", null, { type: 'number', name: 'up', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.config.down", null, { type: 'number', name: 'down', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.config.megabytes", null, { type: 'number', name: 'megabytes', read: true, write: true });
-
+ 
 // Erstelle die benötigten Datenpunkte für die Voucher-Daten
 createState("0_userdata.0.Unifi.Voucher.data.latestJson", "{}", { type: 'string', name: 'latestJson', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.data.code", "", { type: 'string', name: 'code', read: true, write: true });
@@ -36,26 +35,27 @@ createState("0_userdata.0.Unifi.Voucher.data.admin_name", "", { type: 'string', 
 createState("0_userdata.0.Unifi.Voucher.data.used", 0, { type: 'number', name: 'used', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.data.status", "", { type: 'string', name: 'status', read: true, write: true });
 createState("0_userdata.0.Unifi.Voucher.data.status_expires", 0, { type: 'number', name: 'status_expires', read: true, write: true });
-
+ 
 // Erstelle den Datenpunkt für den Trigger
 createState("0_userdata.0.Unifi.Voucher.trigger", false, { type: 'boolean', name: 'trigger', read: true, write: true });
-
+ 
 let lastVoucherCreateTime = 0; // Speichert die create_time des letzten erstellten Vouchers
-
-// Login bei UniFi
-console.log('Versuche, mich bei UniFi anzumelden...');
-unifi.login(config.username, config.password)
-    .then(loginData => {
-        console.log('Login erfolgreich: ' + JSON.stringify(loginData));
-    })
-    .catch(error => {
-        console.log('ERROR: ' + error);
-    });
-
+ 
 // Reagiere auf Änderungen des Datenpunkts "trigger"
 on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async (obj) => {
-    console.log('Trigger-Datenpunkt geändert: ' + obj.state.val);
-
+    console.debug('Trigger-Datenpunkt geändert: ' + obj.state.val);
+ 
+    console.debug('Versuche, mich bei UniFi anzumelden...');
+    const unifi = new Unifi.Controller({ hostname: config.hostname, port: config.port, sslverify: config.sslverify });
+ 
+    await unifi.login(config.username, config.password)
+        .then(loginData => {
+            console.debug('Login erfolgreich: ' + JSON.stringify(loginData));
+        })
+        .catch(error => {
+            console.error('ERROR: ' + error);
+        });
+ 
     try {
         // Lese die Konfigurationswerte aus den Datenpunkten
         const minutes = getState("0_userdata.0.Unifi.Voucher.config.minutes").val;
@@ -65,9 +65,9 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
         const up = getState("0_userdata.0.Unifi.Voucher.config.up").val;
         const down = getState("0_userdata.0.Unifi.Voucher.config.down").val;
         const megabytes = getState("0_userdata.0.Unifi.Voucher.config.megabytes").val;
-
+ 
         // Erzeuge einen neuen Voucher
-        console.log('Trigger aktiviert, erstelle neuen Voucher...');
+        console.debug('Trigger aktiviert, erstelle neuen Voucher...');
         const clientVoucher = await unifi.createVouchers(
             minutes,
             count,
@@ -76,21 +76,28 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
             up,
             down,
             megabytes
-        );
-        console.log('Voucher erstellt: ' + JSON.stringify(clientVoucher));
-
+        ).catch(error => {
+            console.debug('Fehler beim Anlegen: ' + error);
+            rausHier();
+            setState('0_userdata.0.Unifi.Voucher.trigger', false);
+        });
+ 
+        console.debug('Voucher erstellt: ' + JSON.stringify(clientVoucher));
+ 
         // Erfasse die create_time des erstellten Vouchers
         const newVoucherCreateTime = clientVoucher[0].create_time;
-
+ 
         // Hole nur den neuesten Voucher basierend auf create_time
-        console.log('Hole den neuesten Voucher...');
+        console.debug('Hole den neuesten Voucher...');
         const myVoucher = await unifi.getVouchers(newVoucherCreateTime);
-        console.log("Neuester Voucher: " + JSON.stringify(myVoucher));
-
+        console.debug("Neuester Voucher: " + JSON.stringify(myVoucher));
+ 
+        rausHier();
+ 
         // Schreibe die Voucher-Daten in den Datenpunkt "latestJson"
-        console.log('Schreibe Voucher-Daten in den Datenpunkt "latestJson"...');
+        console.debug('Schreibe Voucher-Daten in den Datenpunkt "latestJson"...');
         setState('0_userdata.0.Unifi.Voucher.data.latestJson', JSON.stringify(myVoucher));
-
+ 
         // Extrahiere die Werte aus dem Voucher-Objekt und setze die Datenpunkte
         const voucher = myVoucher[0];
         setState('0_userdata.0.Unifi.Voucher.data.code', voucher.code);
@@ -105,23 +112,24 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
         setState('0_userdata.0.Unifi.Voucher.data.used', voucher.used);
         setState('0_userdata.0.Unifi.Voucher.data.status', voucher.status);
         setState('0_userdata.0.Unifi.Voucher.data.status_expires', voucher.status_expires);
-
+ 
         // Setze den Trigger wieder auf false
-        console.log('Setze den Trigger wieder auf false...');
+        console.debug('Setze den Trigger wieder auf false...');
         setState('0_userdata.0.Unifi.Voucher.trigger', false);
     } catch (error) {
-        console.log('ERROR: ' + error);
+        console.error('ERROR: ' + error);
     }
 });
-
-// Logout bei UniFi am Ende
-onStop(() => {
-    console.log('Logout bei UniFi...');
-    unifi.logout()
+ 
+async function rausHier() {
+    console.debug('Logout bei UniFi...');
+    const unifi = new Unifi.Controller({ hostname: config.hostname, port: config.port, sslverify: config.sslverify });
+ 
+    await unifi.logout()
         .then(() => {
-            console.log('Logout erfolgreich.');
+            console.debug('Logout erfolgreich.');
         })
         .catch(error => {
-            console.log('Fehler beim Logout: ' + error);
+            console.error('Fehler beim Logout: ' + error);
         });
-});
+}
