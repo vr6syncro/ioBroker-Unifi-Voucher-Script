@@ -62,4 +62,4 @@ Setze den Trigger-Datenpunkt 0_userdata.0.Unifi.Voucher.trigger auf true, um ein
 ## Fehlerbehandlung
 
 Fehler und Debugging-Informationen werden in der Konsole ausgegeben. Überprüfe die Konsolenausgabe für detaillierte Fehlermeldungen und Debug-Informationen.
-Es wirden standartmäßig nur Error Meldungen in den Log geschrieben. Für weitere Meldungen bitte das Script/Adapter auf debug stellen.
+Es werden standartmäßig nur Error Meldungen in den Log geschrieben. Für weitere Meldungen bitte das Script/Adapter auf debug stellen.
