@@ -5,7 +5,7 @@ Dieses Skript erstellt UniFi Vouchers basierend auf Konfigurations- und Trigger-
 ## Voraussetzungen
 
 - `node-unifi` Paket installiert im Javascript Adapter
-- UniFi Controller mit API-Zugriff sowie ein Wifi Operator Account
+- UniFi Controller mit API-Zugriff sowie ein User Account mit WIFI Operator Rechten.
 
 ## Installation
 
