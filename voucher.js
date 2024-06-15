@@ -2,6 +2,7 @@
 // V0.2 Fixed Login/Logout, THX to liv-in-sky. Changed Log output
 // V0.3 moved logout, THX to liv-in-sky.
 // V0.4 added awtrix sendto
+// V0.5 added telegram sendto
 
 const Unifi = require('node-unifi');
 
@@ -12,6 +13,12 @@ const config = {
     username: 'User',
     password: 'Password!',
     sslverify: false,
+    // Telegram Message
+    tele: {
+        enabled: true, // Schaltet die Benachrichtigungen für telegram ein/aus
+        accessPoint: 'Gast'
+    },
+    // Awtrix Pushup
     awtrix: {
         enabled: true, // Schaltet die Benachrichtigungen für awtrix ein/aus
         repeat: 5,
@@ -59,17 +66,12 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
     console.debug('Versuche, mich bei UniFi anzumelden...');
     const unifi = new Unifi.Controller({ hostname: config.hostname, port: config.port, sslverify: config.sslverify });
 
-    await unifi.login(config.username, config.password)
-        .then(loginData => {
-            console.debug('Login erfolgreich: ' + JSON.stringify(loginData));
-        })
-        .catch(error => {
-            console.error('ERROR: ' + error);
-        });
-
     try {
+        await unifi.login(config.username, config.password);
+        console.debug('Login erfolgreich.');
+
         // Lese die Konfigurationswerte aus den Datenpunkten
-        const minutes = getState("0_userdata.0.Unifi.Voucher.config.minutes").val;
+        const validityMinutes = getState("0_userdata.0.Unifi.Voucher.config.minutes").val;
         const count = getState("0_userdata.0.Unifi.Voucher.config.count").val;
         const quota = getState("0_userdata.0.Unifi.Voucher.config.quota").val;
         const note = getState("0_userdata.0.Unifi.Voucher.config.note").val;
@@ -80,23 +82,14 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
         // Erzeuge einen neuen Voucher
         console.debug('Trigger aktiviert, erstelle neuen Voucher...');
         const clientVoucher = await unifi.createVouchers(
-            minutes,
+            validityMinutes, // Benutzt die Gültigkeitsdauer in Minuten für die Voucher-Erstellung
             count,
             quota,
             note,
             up,
             down,
             megabytes
-        ).catch(async error => {
-            console.debug('Fehler beim Anlegen: ' + error);
-            console.debug('Logout bei UniFi...');
-            await unifi.logout().then(() => {
-                console.debug('Logout erfolgreich.');
-            }).catch(error => {
-                console.error('Fehler beim Logout: ' + error);
-            });
-            setState('0_userdata.0.Unifi.Voucher.trigger', false);
-        });
+        );
 
         console.debug('Voucher erstellt: ' + JSON.stringify(clientVoucher));
 
@@ -107,13 +100,6 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
         console.debug('Hole den neuesten Voucher...');
         const myVoucher = await unifi.getVouchers(newVoucherCreateTime);
         console.debug("Neuester Voucher: " + JSON.stringify(myVoucher));
-
-        console.debug('Logout bei UniFi...');
-        await unifi.logout().then(() => {
-            console.debug('Logout erfolgreich.');
-        }).catch(error => {
-            console.error('Fehler beim Logout: ' + error);
-        });
 
         // Schreibe die Voucher-Daten in den Datenpunkt "latestJson"
         console.debug('Schreibe Voucher-Daten in den Datenpunkt "latestJson"...');
@@ -149,10 +135,46 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
             });
         }
 
+        // Formatiere die Gültigkeitsdauer in Tagen, Stunden und Minuten
+        const days = Math.floor(validityMinutes / (60 * 24));
+        const hours = Math.floor((validityMinutes % (60 * 24)) / 60);
+        const minutes = validityMinutes % 60;
+        const validityString = `${days} Tage ${hours} Stunden ${minutes} Minuten`;
+
+        // Formatiere die Nachricht für Telegram
+        const telegramMessage = `
+         <b>🛜 Wifi Zugangscode</b>\n
+         <b>Access Point:</b> ${config.tele.accessPoint}\n
+          <b>Code:</b> ${voucher.code}\n
+          ${down !== null ? `<b>Download:</b> ${down} Mbps\n` : ''}
+          ${up !== null ? `<b>Upload:</b> ${up} Mbps\n` : ''}
+          Der Zugang ist ${validityString} gültig.\n `;
+
+        // Sende die formatierte Nachricht an Telegram, wenn Telegram aktiviert ist
+        if (config.tele.enabled) {
+            sendTo('telegram.0', {
+                text: telegramMessage,
+                parse_mode: 'html'
+        });
+}
         // Setze den Trigger wieder auf false
         console.debug('Setze den Trigger wieder auf false...');
         setState('0_userdata.0.Unifi.Voucher.trigger', false);
+
     } catch (error) {
-        console.error('ERROR: ' + error);
+        console.error('Fehler beim Erstellen des Vouchers oder bei der Kommunikation mit UniFi: ' + error);
+
+        // Falls ein Fehler auftritt, versuche trotzdem auszuloggen
+        try {
+            console.debug('Logout bei UniFi...');
+            await unifi.logout();
+            console.debug('Logout erfolgreich.');
+        } catch (logoutError) {
+            console.error('Fehler beim Logout: ' + logoutError);
+        }
+
+        // Setze den Trigger wieder auf false
+        console.debug('Setze den Trigger wieder auf false...');
+        setState('0_userdata.0.Unifi.Voucher.trigger', false);
     }
 });
