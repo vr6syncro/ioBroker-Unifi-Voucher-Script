@@ -11,7 +11,7 @@ const config = {
     port: '443', // 443 UDM Pro, 8443 für andere Controller
     username: 'User',
     password: 'Password!',
-    sslverify: false
+    sslverify: false,
     awtrix: {
         enabled: true, // Schaltet die Benachrichtigungen für awtrix ein/aus
         repeat: 5,
