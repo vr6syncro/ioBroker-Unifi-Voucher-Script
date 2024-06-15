@@ -1,6 +1,7 @@
 // V0.1 initialer release
 // V0.2 Fixed Login/Logout, THX to liv-in-sky. Changed Log output
 // V0.3 moved logout, THX to liv-in-sky.
+// V0.4 added awtrix sendto
 
 const Unifi = require('node-unifi');
 
@@ -11,6 +12,15 @@ const config = {
     username: 'User',
     password: 'Password!',
     sslverify: false
+    awtrix: {
+        enabled: true, // Schaltet die Benachrichtigungen für awtrix ein/aus
+        repeat: 5,
+        duration: 30,
+        rainbow: true,
+        stack: true,
+        wakeup: true,
+        hold: false
+    }
 };
 
 // Erstelle die benötigten Datenpunkte für die Voucher-Konfiguration
@@ -123,6 +133,21 @@ on({ id: '0_userdata.0.Unifi.Voucher.trigger', change: 'ne', val: true }, async 
         setState('0_userdata.0.Unifi.Voucher.data.used', voucher.used);
         setState('0_userdata.0.Unifi.Voucher.data.status', voucher.status);
         setState('0_userdata.0.Unifi.Voucher.data.status_expires', voucher.status_expires);
+
+        // Sende die Benachrichtigung mit dem Voucher-Code, falls aktiviert
+        if (config.awtrix.enabled) {
+            sendTo('awtrix-light', 'notification', {
+                text: `Wifi Code: ${voucher.code}`,
+                sound: null,
+                icon: null,
+                repeat: parseInt(config.awtrix.repeat),
+                duration: parseInt(config.awtrix.duration),
+                rainbow: config.awtrix.rainbow,
+                stack: config.awtrix.stack,
+                wakeup: config.awtrix.wakeup,
+                hold: config.awtrix.hold
+            });
+        }
 
         // Setze den Trigger wieder auf false
         console.debug('Setze den Trigger wieder auf false...');
